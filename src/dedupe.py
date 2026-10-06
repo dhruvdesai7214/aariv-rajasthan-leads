@@ -63,6 +63,13 @@ def _clean(value: Any) -> Any:
     return value
 
 
+def _normalize_city(item_city: str, query_city: str) -> str:
+    """Use the searched city name when Maps returns a longer variant like "Jaipur, Jaipur Nagar Nigam Area"."""
+    if query_city and (not item_city or query_city.lower() in item_city.lower()):
+        return query_city
+    return item_city
+
+
 def item_to_row(
     item: dict[str, Any], default_city: str, default_state: str, city_key: str = ""
 ) -> dict[str, Any]:
@@ -71,7 +78,7 @@ def item_to_row(
     return {
         "name": _clean(item.get("title")),
         "address": _clean(item.get("address")),
-        "city": _clean(item.get("city")) or default_city,
+        "city": _normalize_city(str(_clean(item.get("city"))), default_city),
         "state": _clean(item.get("state")) or default_state,
         "phone": _clean(item.get("phone") or item.get("phoneUnformatted")),
         "website": _clean(item.get("website")),

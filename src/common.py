@@ -48,6 +48,8 @@ SHARED_HOSTS: frozenset[str] = frozenset(
         "business.site",
         "sites.google.com",
         "justdial.com",
+        "indiahandmade.com",
+        "qliqo.in",
     }
 )
 

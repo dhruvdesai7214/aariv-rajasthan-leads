@@ -124,7 +124,7 @@ YEAR_RE = re.compile(
 
 _HONORIFIC = r"(?:mr\.?|mrs\.?|ms\.?|shri|smt\.?|sri|dr\.?)"
 _ROLE = r"(?:proprietor|founder|co-founder|owner|managing director|director|ceo|partner|chairman|md)"
-_NAME = r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
+_NAME = r"([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+){1,3})"  # one line only
 OWNER_PATTERNS: list[re.Pattern[str]] = [
     # "Proprietor: Mr. Ramesh Kumar Sharma" / "Founder - Ramesh Sharma"
     re.compile(rf"(?i:{_ROLE})\s*[:\-–—,]?\s*(?i:{_HONORIFIC}\s+)?{_NAME}"),
@@ -132,6 +132,8 @@ OWNER_PATTERNS: list[re.Pattern[str]] = [
     re.compile(rf"(?:(?i:{_HONORIFIC})\s+)?{_NAME}\s*[,(\-–—|]\s*(?i:{_ROLE})\b"),
     # "CEO Name Ramesh Sharma" (IndiaMART-style fact tables)
     re.compile(rf"(?i:(?:ceo|owner|proprietor)\s+name)\s*[:|]?\s*(?i:{_HONORIFIC}\s+)?{_NAME}"),
+    # TradeIndia / IndiaMART contact cards: "Mr Sunil Somani" on one line, "Mobile : ..." on the next
+    re.compile(rf"(?i:{_HONORIFIC})\s+{_NAME}[ \t]*\n\s*(?i:mobile|phone|contact|call)\b"),
 ]
 _NOT_NAME_WORDS = {
     "jute", "bag", "bags", "pvt", "ltd", "private", "limited", "the", "our", "team", "company",
@@ -140,6 +142,7 @@ _NOT_NAME_WORDS = {
     "industries", "enterprises", "fabrics", "and", "of", "for", "with", "rajasthan", "jaipur",
     "jodhpur", "kishangarh", "udaipur", "ajmer", "bikaner", "nature", "business", "director",
     "managing", "quality", "since", "group", "years", "experience", "view", "profile", "details",
+    "mr", "mrs", "ms", "shri", "smt", "sri", "dr", "nadu", "pradesh",
 }
 
 # Label -> keywords (matched case-insensitively on word boundaries).
@@ -149,9 +152,11 @@ PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "cotton bags": ["cotton bag", "calico bag", "cotton tote", "cotton shopping bag"],
     "canvas bags": ["canvas bag", "canvas tote", "canvas shopping bag"],
     "juco bags": ["juco"],
-    "promotional bags": ["promotional bag", "corporate gift", "custom printed bag", "conference bag",
-                         "logo printed", "branded bag", "promotional jute"],
-    "non-woven bags": ["non woven", "non-woven"],
+    # Bag-specific phrases only: "corporate gifting" alone also matches wallet and leather-goods shops.
+    "promotional bags": ["promotional bag", "corporate gift bag", "custom printed bag", "conference bag",
+                         "logo printed bag", "branded bag", "promotional jute", "printed jute bag"],
+    # "non-woven fusing" is an interlining fabric, not a bag.
+    "non-woven bags": ["non woven bag", "non-woven bag", "non woven carry bag", "non-woven carry bag"],
     "paper bags": ["paper bag"],
     "jute fabric / rolls": ["jute fabric", "jute roll", "hessian", "burlap", "jute cloth"],
     "laminated jute": ["laminated jute", "jute lamination", "pp laminated", "laminated bag"],
@@ -161,7 +166,7 @@ PRODUCT_KEYWORDS: dict[str, list[str]] = {
 
 JUTE_ROLL_INPUT_KEYWORDS: list[str] = [
     "jute fabric", "jute roll", "jute cloth", "hessian", "burlap", "laminated jute",
-    "dyed jute", "jute lamination", "raw jute", "jute yarn", "juco fabric",
+    "dyed jute", "jute lamination", "juco fabric",
 ]
 
 EMPLOYEES_RE = re.compile(
@@ -171,6 +176,17 @@ EMPLOYEES_RE = re.compile(
 # IndiaMART-style "Total Number of Employees 11 to 25 People"
 EMPLOYEE_RANGE_RE = re.compile(r"number of employees\D{0,20}(\d+)\s*(?:to|-)\s*(\d+)", re.I)
 TURNOVER_RE = re.compile(r"(?:annual\s+)?turnover\D{0,30}(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d+)?)\s*-?\s*(\d+)?\s*(lakh|lac|crore|cr)", re.I)
+
+
+# Footer lines from website builders / B2B portals that describe the platform, not the company.
+_PLATFORM_BOILERPLATE = re.compile(
+    r"^.*(?:developed and managed by|infocom network|indiamart intermesh|all rights reserved).*$",
+    re.I | re.M,
+)
+
+
+def strip_platform_boilerplate(text: str) -> str:
+    return _PLATFORM_BOILERPLATE.sub("", text)
 
 
 def _kw_present(text_lower: str, keyword: str) -> bool:
@@ -257,6 +273,7 @@ def extract_year(text: str) -> int | None:
 
 
 def extract_owner(text: str) -> str | None:
+    text = re.sub(r"[*_]{1,3}", "", text)  # markdown bold/italic splits "**Name**\n**(Role)**"
     for pattern in OWNER_PATTERNS:
         for match in pattern.finditer(text):
             name = re.sub(r"\s+", " ", match.group(1)).strip()
@@ -277,6 +294,17 @@ def extract_products(text_lower: str) -> list[str]:
 
 def mentions_jute_roll(text_lower: str) -> bool:
     return any(_kw_present(text_lower, kw) for kw in JUTE_ROLL_INPUT_KEYWORDS)
+
+
+_FABRIC_PRODUCT_LINE = re.compile(
+    r"^\s*(?:[-*|]|\d+\.)\s.*\b(?:hessian|burlap|jute fabric|jute cloth|laminated jute fabric)\b",
+    re.I | re.M,
+)
+
+
+def lists_fabric_as_product(markdown: str) -> bool:
+    """True when jute fabric appears as a product list item (they sell it), not just in prose (they use it)."""
+    return _FABRIC_PRODUCT_LINE.search(markdown) is not None
 
 
 def estimate_size(text: str) -> tuple[str, list[str]]:
@@ -326,6 +354,7 @@ def estimate_size(text: str) -> tuple[str, list[str]]:
 def build_sales_notes(
     products: list[str],
     jute_roll: bool,
+    sells_fabric: bool,
     gstin: str | None,
     year: int | None,
     size: str,
@@ -336,7 +365,12 @@ def build_sales_notes(
     notes: list[str] = []
     if products:
         notes.append("Makes " + ", ".join(products) + ".")
-    if jute_roll:
+    if sells_fabric:
+        notes.append(
+            "Also lists jute fabric/hessian among its own products: may be a fabric trader "
+            "(competitor or reseller) as well as a bag maker. Qualify on the call."
+        )
+    elif jute_roll:
         notes.append("Site mentions jute fabric/hessian/rolls as material, so a likely buyer of dyed/laminated jute rolls.")
     elif any(p in products for p in ("jute bags", "juco bags", "promotional bags", "canvas bags")):
         notes.append("Makes bags but doesn't name its fabric supplier; ask about current jute roll sourcing.")
@@ -354,6 +388,7 @@ def build_sales_notes(
 
 def extract_rules(markdown: str, site_domain: str = "") -> dict[str, Any]:
     """Free, deterministic extraction from scraped markdown."""
+    markdown = strip_platform_boilerplate(markdown)
     lower = markdown.lower()
     products = extract_products(lower)
     jute_roll = mentions_jute_roll(lower)
@@ -372,7 +407,7 @@ def extract_rules(markdown: str, site_domain: str = "") -> dict[str, Any]:
         "mentions_jute_roll_input": jute_roll,
         "size_signal": size,
         "notes_for_sales": build_sales_notes(
-            products, jute_roll, gstin, year, size, size_evidence, mobiles, whatsapp
+            products, jute_roll, lists_fabric_as_product(markdown), gstin, year, size, size_evidence, mobiles, whatsapp
         ),
     }
 

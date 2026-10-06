@@ -176,6 +176,18 @@ def html_to_markdown(html: str, base_url: str = "") -> str:
     return ("\n".join(header) + "\n\n" + text).strip() if header else text
 
 
+_PARKED_PAGE = re.compile(
+    r"parked domain|domain (?:name )?(?:is )?for sale|buy this domain|if this is your domain|"
+    r"this domain (?:has expired|is parked)|account (?:has been )?suspended",
+    re.I,
+)
+
+
+def is_parked_page(markdown: str) -> bool:
+    """Registrar parking / expired / suspended pages: there's no company content to extract."""
+    return _PARKED_PAGE.search(markdown[:5000]) is not None
+
+
 def visible_text_length(markdown: str) -> int:
     """Length of the page text excluding the Title/Description/Contact links header lines."""
     body = re.sub(r"^(Title|Description|Contact links): .*$", "", markdown, flags=re.M)
@@ -285,6 +297,9 @@ def fetch_page(
             fallback_url = url  # 403/5xx often means bot protection; Firecrawl may get through
             break
         markdown = html_to_markdown(html, final_url)
+        if is_parked_page(markdown):
+            logger.info("Parked/expired domain page at %s", final_url)
+            return None
         min_chars = MIN_CONTENT_CHARS if path == "/" else MIN_SUBPAGE_CHARS
         if visible_text_length(markdown) >= min_chars:
             return PageResult(path=path, url=final_url, markdown=markdown, method="requests")
@@ -294,7 +309,7 @@ def fetch_page(
 
     if fallback_url and firecrawl is not None:
         markdown = firecrawl.scrape(fallback_url)
-        if markdown.strip():
+        if markdown.strip() and not is_parked_page(markdown):
             return PageResult(path=path, url=fallback_url, markdown=markdown.strip(), method="firecrawl")
     return None
 

@@ -120,3 +120,48 @@ def test_run_is_resumable(tmp_path: Path) -> None:
     assert rec["domain"] == "shreejute.in" and rec["extraction_method"] == "rules"
     assert ex.run(in_dir=src_dir, out_dir=out_dir) == []
     assert len(ex.run(in_dir=src_dir, out_dir=out_dir, force=True)) == 2
+
+
+TRADEINDIA_CARD = """GST : 08AOWPS7936M1ZM
+- Our Products
+  - Hessian Cloth - Burlap
+  - Jute Bags for Shopping
+We at Rajasthan Jute have been working with Jute and Hessian material.
+**Mr Sunil Somani**
+Mobile : 07315122009
+**Mr Chandra Prakash**
+**(Managing Director)**
+RAJASTHAN JUTE All Rights Reserved. Developed and Managed by Infocom Network Private Limited.
+"""
+
+
+def test_tradeindia_contact_card_owner() -> None:
+    assert ex.extract_owner("**Mr Sunil Somani**\nMobile : 07315122009") == "Sunil Somani"
+    # An explicit role beats a bare contact card.
+    assert ex.extract_owner(TRADEINDIA_CARD) == "Chandra Prakash"
+    assert ex.extract_owner("Tamil Nadu\n\nMr Chandra Prakash, Director") == "Chandra Prakash"
+    assert ex.extract_owner("**Mr Chandra Prakash**\n**(Managing Director)**") == "Chandra Prakash"
+
+
+def test_platform_footer_is_not_a_size_signal() -> None:
+    rec = ex.extract_rules(TRADEINDIA_CARD, "rajasthanjute.com")
+    assert rec["size_signal"] == "small"
+    assert "Pvt Ltd" not in rec["notes_for_sales"]
+
+
+def test_fabric_seller_flagged_as_possible_competitor() -> None:
+    rec = ex.extract_rules(TRADEINDIA_CARD, "rajasthanjute.com")
+    assert "fabric trader" in rec["notes_for_sales"]
+    # The sample site only uses fabric in prose, so it stays a likely buyer.
+    assert "likely buyer" in ex.extract_rules(SAMPLE_SITE_MD, "shreejute.in")["notes_for_sales"]
+
+
+def test_raw_jute_fibre_is_not_roll_input() -> None:
+    assert not ex.mentions_jute_roll("jute rope made from high-grade raw jute bales and jute yarn")
+
+
+def test_product_keywords_avoid_known_false_positives() -> None:
+    lower = "corporate gifting | leather wallets | non-woven fusing microdot interlining"
+    assert ex.extract_products(lower) == []
+    assert "promotional bags" in ex.extract_products("custom printed bags for corporate events")
+    assert "non-woven bags" in ex.extract_products("non woven carry bags manufacturer")

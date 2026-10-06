@@ -136,3 +136,13 @@ def test_scrape_site_stops_when_home_page_is_dead(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sw, "fetch_page", fake_fetch_page)
     assert sw.scrape_site("https://dead.example.in", None) == []
     assert calls == ["/"]
+
+
+def test_parked_domain_is_not_saved(monkeypatch: pytest.MonkeyPatch) -> None:
+    parked = "<html><body><p>Registered at Hostinger. If this is your domain, you can manage it in your " \
+             "Hostinger account. Parked Domain name on Hostinger DNS system.</p>" + "<p>filler text</p>" * 40 + \
+             "</body></html>"
+    monkeypatch.setattr(sw, "fetch_html", lambda s, u: (200, u, parked))
+    fc = FakeFirecrawl()
+    assert sw.fetch_page(object(), "http://parked.example.in", "/", fc) is None  # type: ignore[arg-type]
+    assert fc.calls == []

@@ -40,3 +40,15 @@ def test_fuzzy_keeps_similar_names_with_different_websites_apart() -> None:
     ]
     kept = dedupe_by_fuzzy_name(rows)
     assert len(kept) == 3
+
+
+def test_city_variant_is_normalized_to_searched_city(tmp_path: Path) -> None:
+    import json
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    item = {"title": "Jutonomy", "city": "Jaipur, Jaipur Nagar Nigam Area", "state": "Rajasthan", "placeId": "P1"}
+    payload = {"city_key": "jaipur", "city": "Jaipur", "state": "Rajasthan", "items": [item]}
+    (raw / "q.json").write_text(json.dumps(payload), encoding="utf-8")
+    df = run(raw_dir=raw, out_path=tmp_path / "d.csv")
+    assert list(df["city"]) == ["Jaipur"]
