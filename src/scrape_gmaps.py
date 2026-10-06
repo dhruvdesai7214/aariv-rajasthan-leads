@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,8 @@ from src.common import (
 logger = logging.getLogger(__name__)
 
 TERMINAL_OK_STATUSES: frozenset[str] = frozenset({"SUCCEEDED"})
+# Apify rejects a max_total_charge_usd below this ("Maximum cost per run is less than the allowed minimum").
+APIFY_MIN_CHARGE_CAP_USD = 0.50
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,14 @@ def _field(obj: Any, snake: str, camel: str) -> Any:
     return getattr(obj, snake, None)
 
 
+def charge_cap(actor_cfg: dict[str, Any]) -> Decimal | None:
+    """Per-run spending ceiling, raised to Apify's minimum if configured lower."""
+    value = actor_cfg.get("max_charge_usd_per_query")
+    if value is None:
+        return None
+    return Decimal(str(max(float(value), APIFY_MIN_CHARGE_CAP_USD)))
+
+
 def build_actor_input(query: SearchQuery, actor_cfg: dict[str, Any]) -> dict[str, Any]:
     """Actor input with every paid add-on disabled so runs stay on the base per-place price."""
     return {
@@ -113,7 +124,7 @@ def run_query(client: ApifyClient, query: SearchQuery, actor_cfg: dict[str, Any]
     def _call() -> list[dict[str, Any]]:
         run = client.actor(actor_cfg.get("id", "compass/crawler-google-places")).call(
             run_input=build_actor_input(query, actor_cfg),
-            max_total_charge_usd=actor_cfg.get("max_charge_usd_per_query"),
+            max_total_charge_usd=charge_cap(actor_cfg),
             logger=None,
         )
         if run is None:

@@ -48,5 +48,6 @@ actor:
   max_places_per_query: 35   # 33 queries x 35 = ~1,155 places = ~$4.60 at the free-tier rate
   language: en
   country_code: in
-  # Hard spending cap per actor run, in USD (passed to Apify as max_total_charge_usd).
-  max_charge_usd_per_query: 0.20
+  # Spending ceiling per actor run, in USD (passed to Apify as max_total_charge_usd).
+  # Apify rejects values below $0.50. Actual spend is ~35 x $0.004 = ~$0.14 per query.
+  max_charge_usd_per_query: 0.50

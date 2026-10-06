@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.common import load_config
-from src.scrape_gmaps import SearchQuery, build_actor_input, build_queries
+from src.scrape_gmaps import SearchQuery, build_actor_input, build_queries, charge_cap
 
 
 def test_build_queries_expands_templates_per_city() -> None:
@@ -31,3 +31,9 @@ def test_actor_input_keeps_paid_addons_off() -> None:
     assert run_input["scrapePlaceDetailPage"] is False
     assert run_input["maxReviews"] == 0 and run_input["maxImages"] == 0
     assert run_input["skipClosedPlaces"] is False
+
+
+def test_charge_cap_respects_apify_minimum() -> None:
+    assert float(charge_cap({"max_charge_usd_per_query": 0.2})) == 0.5
+    assert float(charge_cap({"max_charge_usd_per_query": 1.25})) == 1.25
+    assert charge_cap({}) is None
