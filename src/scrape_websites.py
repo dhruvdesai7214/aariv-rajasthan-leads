@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -54,6 +55,8 @@ MIN_CONTENT_CHARS = 200
 MIN_SUBPAGE_CHARS = 30
 MAX_HTML_BYTES = 3_000_000
 FAILED_FILE = "_failed.json"
+# Firecrawl's free tier allows only a few dozen requests per minute; stay well under it.
+FIRECRAWL_PER_MINUTE = 12
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/128.0 Safari/537.36"
@@ -234,22 +237,42 @@ def _is_transient_firecrawl_error(exc: BaseException) -> bool:
     return type(exc).__name__ in {"RateLimitError", "InternalServerError", "RequestTimeoutError"}
 
 
-class FirecrawlFetcher:
-    """Thin wrapper around firecrawl-py with retries and a page budget."""
+class RateLimiter:
+    """Spaces calls at least `60 / per_minute` seconds apart across threads."""
 
-    def __init__(self, api_key: str, budget: FirecrawlBudget) -> None:
+    def __init__(self, per_minute: float) -> None:
+        self.interval = 60.0 / per_minute if per_minute > 0 else 0.0
+        self._next_at = 0.0
+        self._lock = threading.Lock()
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            delay = self._next_at - now
+            self._next_at = max(now, self._next_at) + self.interval
+        if delay > 0:
+            time.sleep(delay)
+
+
+class FirecrawlFetcher:
+    """Thin wrapper around firecrawl-py with retries, a page budget and client-side rate limiting."""
+
+    def __init__(self, api_key: str, budget: FirecrawlBudget, per_minute: float = FIRECRAWL_PER_MINUTE) -> None:
         from firecrawl import Firecrawl
 
         self._client = Firecrawl(api_key=api_key)
         self.budget = budget
+        self._limiter = RateLimiter(per_minute)
 
     def scrape(self, url: str) -> str:
         if not self.budget.take():
             logger.warning("Firecrawl page budget (%d) used up; skipping %s", self.budget.limit, url)
             return ""
 
-        @api_retry(_is_transient_firecrawl_error, attempts=4, logger=logger)
+        # Rate-limit windows are a minute long, so back off 15s -> 30s -> 60s rather than seconds.
+        @api_retry(_is_transient_firecrawl_error, attempts=4, min_wait=15.0, max_wait=60.0, logger=logger)
         def _call() -> str:
+            self._limiter.wait()
             doc: Any = self._client.scrape(url, formats=["markdown"], only_main_content=False, timeout=45_000)
             markdown = getattr(doc, "markdown", None)
             if markdown is None and isinstance(doc, dict):
@@ -340,12 +363,17 @@ def scrape_site(
 
         pages: list[PageResult] = []
         seen_urls: set[str] = set()
+        subpage_firecrawl = firecrawl
         for path in PAGE_PATHS:
-            page = fetch_page(session, website, path, firecrawl)
+            page = fetch_page(session, website, path, firecrawl if path == "/" else subpage_firecrawl)
             if page is None:
                 if path == "/":
                     break  # home page unreachable even via fallback: the site is down or blocking us
                 continue
+            if path == "/" and page.method == "firecrawl":
+                # The site blocks plain requests, so its subpages will too. The home page usually
+                # carries the contact footer; don't spend two more Firecrawl credits per blocked site.
+                subpage_firecrawl = None
             # /about often redirects to /; don't save the same page twice.
             if page.url in seen_urls:
                 continue

@@ -19,7 +19,7 @@ from typing import Any
 import pandas as pd
 from rapidfuzz import fuzz, process
 
-from src.common import DEDUPED_CSV, RAW_GMAPS_DIR, setup_logging, site_key, write_text_atomic
+from src.common import DEDUPED_CSV, RAW_GMAPS_DIR, load_config, setup_logging, site_key, write_text_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +63,25 @@ def _clean(value: Any) -> Any:
     return value
 
 
-def _normalize_city(item_city: str, query_city: str) -> str:
-    """Use the searched city name when Maps returns a longer variant like "Jaipur, Jaipur Nagar Nigam Area"."""
-    if query_city and (not item_city or query_city.lower() in item_city.lower()):
-        return query_city
-    return item_city
+def _configured_city_names() -> list[str]:
+    try:
+        return [c["name"] for c in load_config()["cities"].values()]
+    except (OSError, KeyError, TypeError):
+        return []
+
+
+def _normalize_city(item_city: str, query_city: str, known_cities: list[str] | None = None) -> str:
+    """Map Maps' city strings onto the configured cities sales works with.
+
+    "Jaipur, Jaipur Nagar Nigam Area" -> "Jaipur"; a Kishangarh search returning an Ajmer place
+    stays "Ajmer"; a suburb such as "Bhuwana" falls back to the searched city ("Udaipur").
+    """
+    known = known_cities if known_cities is not None else _configured_city_names()
+    low = item_city.lower()
+    for name in sorted(known, key=len, reverse=True):
+        if name.lower() in low:
+            return name
+    return query_city or item_city
 
 
 def item_to_row(

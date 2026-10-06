@@ -52,3 +52,13 @@ def test_city_variant_is_normalized_to_searched_city(tmp_path: Path) -> None:
     (raw / "q.json").write_text(json.dumps(payload), encoding="utf-8")
     df = run(raw_dir=raw, out_path=tmp_path / "d.csv")
     assert list(df["city"]) == ["Jaipur"]
+
+
+def test_city_normalization_rules() -> None:
+    from src.dedupe import _normalize_city
+
+    known = ["Jaipur", "Ajmer", "Kishangarh", "Udaipur"]
+    assert _normalize_city("Jaipur, Jaipur Nagar Nigam Area", "Jaipur", known) == "Jaipur"
+    assert _normalize_city("Ajmer", "Kishangarh", known) == "Ajmer"
+    assert _normalize_city("Bhuwana", "Udaipur", known) == "Udaipur"
+    assert _normalize_city("", "Jaipur", known) == "Jaipur"

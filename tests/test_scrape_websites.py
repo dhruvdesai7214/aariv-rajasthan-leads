@@ -146,3 +146,22 @@ def test_parked_domain_is_not_saved(monkeypatch: pytest.MonkeyPatch) -> None:
     fc = FakeFirecrawl()
     assert sw.fetch_page(object(), "http://parked.example.in", "/", fc) is None  # type: ignore[arg-type]
     assert fc.calls == []
+
+
+def test_blocked_site_uses_firecrawl_for_home_page_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sw, "fetch_html", lambda s, u: (403, u, "Forbidden"))
+    fc = FakeFirecrawl()
+    pages = sw.scrape_site("https://blocked.example.in", fc)  # type: ignore[arg-type]
+    assert [p.path for p in pages] == ["/"]
+    assert fc.calls == ["https://blocked.example.in/"]
+
+
+def test_rate_limiter_spaces_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+    clock = iter([0.0, 0.0, 0.0])
+    monkeypatch.setattr(sw.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(sw.time, "sleep", lambda d: sleeps.append(d))
+    limiter = sw.RateLimiter(per_minute=12)
+    for _ in range(3):
+        limiter.wait()
+    assert sleeps == [5.0, 10.0]
