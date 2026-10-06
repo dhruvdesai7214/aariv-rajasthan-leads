@@ -1,0 +1,11 @@
+apify-client>=2.0
+anthropic>=1.0
+firecrawl-py>=4.0
+requests>=2.31
+beautifulsoup4>=4.12
+rapidfuzz>=3.0
+pandas>=2.0
+pyyaml>=6.0
+python-dotenv>=1.0
+tqdm>=4.66
+tenacity>=8.2
