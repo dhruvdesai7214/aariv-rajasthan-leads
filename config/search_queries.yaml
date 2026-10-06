@@ -1,0 +1,53 @@
+# Google Maps search configuration for the Aariv Fabrics Rajasthan lead pipeline.
+#
+# Each template is expanded once per selected city ({city} is replaced by the
+# city's display name). Every expanded query becomes one Apify actor run and one
+# raw file in data/raw/gmaps/<query_slug>.json.
+
+cities:
+  jaipur:
+    name: Jaipur
+    state: Rajasthan
+  jodhpur:
+    name: Jodhpur
+    state: Rajasthan
+  kishangarh:
+    name: Kishangarh
+    state: Rajasthan
+  udaipur:
+    name: Udaipur
+    state: Rajasthan
+  ajmer:
+    name: Ajmer
+    state: Rajasthan
+  bikaner:
+    name: Bikaner
+    state: Rajasthan
+
+# Shared templates applied to every city.
+templates:
+  - "jute bag manufacturer in {city}"
+  - "jute bags wholesale {city}"
+  - "cotton canvas bag manufacturer in {city}"
+  - "promotional bags manufacturer {city}"
+  - "jute products manufacturer {city}"
+
+# Optional extra queries for one city only (e.g. industrial areas).
+city_extra_templates:
+  jaipur:
+    - "jute bag manufacturer Sitapura Jaipur"
+    - "bag manufacturer VKI Area Jaipur"
+  jodhpur:
+    - "handicraft jute bags Jodhpur"
+
+# Settings for compass/crawler-google-places. These keep runs inside the Apify
+# free plan: the actor charges about $0.004 per place on the free tier, and
+# every paid add-on (reviews, images, contact enrichment, filters) is left off.
+actor:
+  id: compass/crawler-google-places
+  max_places_per_query: 35   # 33 queries x 35 = ~1,155 places = ~$4.60 at the free-tier rate
+  language: en
+  country_code: in
+  # Spending ceiling per actor run, in USD (passed to Apify as max_total_charge_usd).
+  # Apify rejects values below $0.50. Actual spend is ~35 x $0.004 = ~$0.14 per query.
+  max_charge_usd_per_query: 0.50
