@@ -51,7 +51,9 @@ def score(r, page):
     if r.get("platform") in ("wix", "other", "wordpress") and price is None:
         s -= 0.5; reasons.append(f"{r['platform']} site, couldn't verify shop")
     s = max(1, min(5, round(s)))
-    cat = category(text)
+    cat = category(f"{title} {desc}")
+    if cat == "skincare":
+        cat = category(text)
     return s, "; ".join(reasons), cat
 
 CATS = [("men's", r"\bmen'?s\b|for men|beard|grooming"), ("acne", r"\bacne|blemish|breakout"),
@@ -65,6 +67,7 @@ def category(text):
         if re.search(pat, text[:6000], re.I):
             return name
     return "skincare"
+
 
 def main():
     manual = {r["domain"]: r for r in csv.DictReader(open(DATA / "pilot_scores.csv", encoding="utf-8"))}

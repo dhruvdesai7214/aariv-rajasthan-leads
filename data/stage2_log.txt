@@ -1,1 +1,4 @@
 2413 to check
+wrote 2413 rows -> data/stage2_all.csv
+wrote 1433 rows -> data/filtered_brands.csv
+Counter({'KEPT': 1433, 'site does not load / blocked': 233, 'country not UK/US': 206, 'eczema/sensitive specialist': 130, 'robots.txt disallows': 101, 'too few products': 79, 'median price too low': 76, 'unreachable from this environment': 59, 'careers page': 49, 'too many products': 47})

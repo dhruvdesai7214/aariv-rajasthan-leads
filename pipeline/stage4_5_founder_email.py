@@ -26,14 +26,33 @@ COMMON = set("""skin skincare beauty organic organics natural naturals botanical
 apothecary labs lab studio shop store collection products essentials oils oil balm butter soap face glow team story
 founder founders about home our we us the and of for with in new york london farm farms herbal herbals pure clean
 wellness spa clinic rituals ritual cosmetics creams cream serum serums love life world earth honey bee bees rose
-garden wild moon sun golden gold shea tallow""".split())
+garden wild moon sun golden gold shea tallow blog menu cart account login search news journal shop""".split())
+
+import gender_guesser.detector as _gd
+from english_words import get_english_words_set
+_GENDER = _gd.Detector(case_sensitive=False)
+_WORDS = get_english_words_set(["web2"], lower=True)
+
+def plausible_first(tok):
+    """Known first name (any country), or a capitalised token that is not an English word."""
+    if not re.fullmatch(r"[A-Z][a-zà-ÿ'’\-]{1,}", tok) or tok.lower() in ("i'm", "i’m") or re.search(r"['’]s$", tok):
+        return False
+    if _GENDER.get_gender(tok) != "unknown":
+        return True
+    return tok.lower() not in _WORDS
 
 def clean_name(n, brand=""):
     brand_words = {w.lower() for w in re.findall(r"[A-Za-z]+", brand)}
     parts = [p for p in n.split() if p not in STOP]
     parts = parts[:2]
+    parts = [p.rstrip("-’'") for p in parts]
     if not parts or any(p.lower() in COMMON or len(p) < 2 for p in parts) or (len(parts) == 1 and parts[0].lower() in brand_words):
         return ""
+    if not plausible_first(parts[0]):
+        return ""
+    if len(parts) == 2 and parts[1].lower() in _WORDS and _GENDER.get_gender(parts[1]) == "unknown" and \
+            parts[1].lower() in ("nourishing", "natural", "organic", "handmade", "skincare", "beauty"):
+        parts = parts[:1]
     return " ".join(parts)
 
 def site_names(text, brand=""):

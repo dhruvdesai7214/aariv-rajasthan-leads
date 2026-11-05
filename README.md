@@ -12,6 +12,8 @@ python3 stage4_5_founder_email.py        # -> data/stage4_5.csv
 python3 stage6_report.py                 # -> data/final_list.csv + counts
 ```
 
+Dependencies: `pip install requests gender-guesser english-words`.
+
 Rules applied: robots.txt is respected. Instagram, LinkedIn, Facebook and Faire are never fetched
 (Faire returns 403 to bots). Missing data stays blank. Every guessed email is `unverified_guess`
 until a verifier key is added.
