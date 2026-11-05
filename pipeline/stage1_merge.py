@@ -15,6 +15,12 @@ def main():
     excl = load_exclude()
     rows = read_csv("raw_formulabotanica.csv")
     rows += [{"brand": b, "website": w, "source": "websearch", "query": q} for b, w, q in WEBSEARCH]
+    exa = DATA / "exa_raw.tsv"
+    if exa.exists():
+        import csv as _csv
+        for r in _csv.DictReader(open(exa, encoding="utf-8"), delimiter="\t"):
+            d = r["domain"].strip().lower().removeprefix("https://").removeprefix("http://").split("/")[0].removeprefix("www.")
+            rows.append({"brand": r["brand"], "website": "https://" + d, "source": "exa_agent", "query": r["run"]})
     out, seen, dropped = [], set(), {"no_domain": 0, "excluded": 0, "dupe": 0}
     for r in rows:
         if not r["website"]:

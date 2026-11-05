@@ -159,8 +159,8 @@ def check(row):
 
     # size signals
     ls = " ".join(l.lower() for l in links(h, base))
-    out["has_stockists"] = "y" if re.search(r"stockist|where-to-buy|retailers", ls) else ""
-    out["has_press"] = "y" if re.search(r"/press|/media|as-seen|in-the-press", ls) else ""
+    out["has_stockists"] = "y" if re.search(r"/(pages/)?(stockists?|where-to-buy|retailers|find-a-stockist)\b", ls) else ""
+    out["has_press"] = "y" if re.search(r"/(pages/)?(press|in-the-press|as-seen-in|featured-in)\b", ls) else ""
     out["has_wholesale_or_faire"] = "y" if re.search(r"wholesale|faire\.com", ls) else ""
     out["has_careers"] = "y" if re.search(r"careers|/jobs|join-the-team|work-with-us", ls) else ""
     out["about_url"] = find_page(h, base, ("about", "our-story", "story", "founder", "who-we-are"))
@@ -202,7 +202,7 @@ def main():
     if "--limit" in sys.argv:
         rows = rows[: int(sys.argv[sys.argv.index("--limit") + 1])]
     print(len(rows), "to check")
-    with ThreadPoolExecutor(8) as ex:   # different domains in parallel; ~5 requests per domain
+    with ThreadPoolExecutor(16) as ex:   # different domains in parallel; ~5 requests per domain
         res = list(ex.map(check, rows))
     write_csv("stage2_all.csv", res, FIELDS)
     write_csv("filtered_brands.csv", [r for r in res if not r["drop_reason"]], FIELDS)

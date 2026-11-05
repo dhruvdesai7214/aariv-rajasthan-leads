@@ -11,7 +11,8 @@ from stage2_filter import visible_text, find_page
 NAME = r"([A-Z][a-zà-ÿ'’\-]+(?: [A-Z][a-zà-ÿ'’\-]+)?)"
 SITE_PATTERNS = [
     r"[Ff]ounded by (?:Dr\.? |Dr )?" + NAME,
-    r"[Ff]ounder(?: and| &|,)?(?: [A-Za-z]+)?[:,]? (?:Dr\.? )?" + NAME,
+    r"[Ff]ounder[:,]? (?:Dr\.? )?" + NAME,
+    r"[Ff]ounder (?:and|&) (?:[Ff]ormulator|CEO|[Cc]hemist|[Ee]sthetician)[:,]? (?:Dr\.? )?" + NAME,
     NAME + r",? (?:the |our |is the )?(?:[Cc]o-)?[Ff]ounder",
     r"(?:I'm|I’m|I am|[Mm]y name is) (?:Dr\.? )?" + NAME,
     r"[Mm]eet (?:Dr\.? )?" + NAME,
@@ -21,15 +22,25 @@ STOP = {"The", "Our", "We", "My", "Hi", "Hello", "Founder", "About", "Meet", "Sk
 GENERIC = {"hello", "info", "contact", "hi", "support", "orders", "sales", "enquiries", "enquiry", "help",
            "customerservice", "care", "admin", "team", "shop", "wholesale", "press", "office", "mail", "service"}
 
-def clean_name(n):
-    parts = [p for p in n.split() if p not in STOP]
-    return " ".join(parts[:2])
+COMMON = set("""skin skincare beauty organic organics natural naturals botanical botanicals body care co company
+apothecary labs lab studio shop store collection products essentials oils oil balm butter soap face glow team story
+founder founders about home our we us the and of for with in new york london farm farms herbal herbals pure clean
+wellness spa clinic rituals ritual cosmetics creams cream serum serums love life world earth honey bee bees rose
+garden wild moon sun golden gold shea tallow""".split())
 
-def site_names(text):
+def clean_name(n, brand=""):
+    brand_words = {w.lower() for w in re.findall(r"[A-Za-z]+", brand)}
+    parts = [p for p in n.split() if p not in STOP]
+    parts = parts[:2]
+    if not parts or any(p.lower() in COMMON or len(p) < 2 for p in parts) or (len(parts) == 1 and parts[0].lower() in brand_words):
+        return ""
+    return " ".join(parts)
+
+def site_names(text, brand=""):
     found = []
     for pat in SITE_PATTERNS:
         for m in re.finditer(pat, text):
-            n = clean_name(m.group(1))
+            n = clean_name(m.group(1), brand)
             if n and n not in found:
                 found.append(n)
     return found
@@ -88,7 +99,7 @@ def process(r):
             note = "name from Formula Botanica graduate profile only (not found on brand site)"
     else:
         for k in ("about", "home"):
-            names = site_names(texts.get(k, ""))
+            names = site_names(texts.get(k, ""), r["brand"])
             if names:
                 parts = names[0].split()
                 first, last = parts[0], (parts[1] if len(parts) > 1 else "")
@@ -130,7 +141,7 @@ def process(r):
 def main():
     from concurrent.futures import ThreadPoolExecutor
     rows = read_csv("scored_brands.csv")
-    with ThreadPoolExecutor(8) as ex:
+    with ThreadPoolExecutor(16) as ex:
         out = list(ex.map(process, rows))
     write_csv("stage4_5.csv", out, list(out[0].keys()))
 
